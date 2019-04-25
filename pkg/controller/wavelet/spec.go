@@ -14,7 +14,7 @@ func labelsForWavelet(name string) labels.Set {
 	return labels.Set{"app": name}
 }
 
-func getWaveletBootstrapPodSpec(cluster *waveletv1alpha1.Wavelet, wallet string, bootstrapNodes ...string) *corev1.Pod {
+func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, wallet string, bootstrapNodes ...string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cluster.Name,
@@ -53,7 +53,7 @@ func getWaveletBootstrapPodSpec(cluster *waveletv1alpha1.Wavelet, wallet string,
 	}
 }
 
-func getWaveletDeploymentSpec(cluster *waveletv1alpha1.Wavelet, bootstrap ...string) *appsv1.Deployment {
+func getWaveletDeployment(cluster *waveletv1alpha1.Wavelet, bootstrap ...string) *appsv1.Deployment {
 	lbls := labelsForWavelet(cluster.Name)
 	replicas := cluster.Spec.Size - 1
 

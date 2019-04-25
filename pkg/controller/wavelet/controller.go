@@ -101,29 +101,49 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 		return result, nil
 	}
 
+	if cluster.Spec.Size == 0 { // Handle the case where the cluster size is 0.
+		if bootstrap, err := getBootstrapNode(r, cluster); bootstrap != nil && err == nil {
+			if err := r.client.Delete(context.TODO(), bootstrap); err != nil && !errors.IsNotFound(err) && !errors.IsAlreadyExists(err) {
+				logger.Error(err, "Failed to delete the bootstrap node.")
+				return result, err
+			}
+		}
+
+		if deployment, err := getBootstrappedCluster(r, cluster); deployment != nil && err == nil {
+			if err := r.client.Delete(context.TODO(), deployment); err != nil && !errors.IsNotFound(err) && !errors.IsAlreadyExists(err) {
+				logger.Error(err, "Failed to delete the clusters deployment.")
+				return result, err
+			}
+		}
+
+		if cluster.Status.Stage != waveletv1alpha1.StageGenesis {
+			cluster.Status.Stage = waveletv1alpha1.StageGenesis
+
+			if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
+				return result, err
+			}
+
+			return result, nil
+		}
+
+		logger.Info("The number of workers for Wavelet is currently set to zero. Please set it to be >= 1.")
+
+		return result, nil
+	}
+
 	switch cluster.Status.Stage {
 	case waveletv1alpha1.StageGenesis:
-		return stageGenesis(r, logger, cluster)
+		if result, err := stageGenesis(r, logger, cluster); result.Requeue || err != nil {
+			return result, err
+		}
 	case waveletv1alpha1.StageBootstrap:
-		return stageBootstrap(r, logger, cluster)
+		if result, err := stageBootstrap(r, logger, cluster); result.Requeue || err != nil {
+			return result, err
+		}
 	case waveletv1alpha1.StageReady:
-		return stageReady(r, logger, cluster)
-	}
-
-	return result, nil
-}
-
-func stageGenesis(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (reconcile.Result, error) {
-	var result reconcile.Result
-
-	bootstrap, err := createBootstrapNode(r, logger, cluster)
-	if err != nil {
-		return result, err
-	}
-
-	if bootstrap == nil {
-		result.Requeue = true
-		return result, err
+		if result, err := stageReady(r, logger, cluster); result.Requeue || err != nil {
+			return result, err
+		}
 	}
 
 	pods, err := getPods(r, cluster)
@@ -134,6 +154,18 @@ func stageGenesis(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alp
 	names := getPodNames(pods)
 
 	if result, err = updateClusterNodeList(r, logger, cluster, names); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+func stageGenesis(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (reconcile.Result, error) {
+	var result reconcile.Result
+
+	bootstrap, err := createBootstrapNode(r, logger, cluster)
+	if err != nil {
+		logger.Error(err, "Failed to create a bootstrap node.")
 		return result, err
 	}
 
@@ -151,34 +183,23 @@ func stageGenesis(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alp
 func stageBootstrap(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (reconcile.Result, error) {
 	var result reconcile.Result
 
-	bootstrap, err := createBootstrapNode(r, logger, cluster)
-	if err != nil {
-		return result, err
+	bootstrap, err := getBootstrapNode(r, cluster)
+	if bootstrap == nil || err != nil {
+		if errors.IsNotFound(err) {
+			cluster.Status.Stage = waveletv1alpha1.StageGenesis
+
+			if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
+				return result, err
+			}
+
+			return result, nil
+		}
+
+		return result, nil
 	}
 
-	if bootstrap == nil {
-		result.Requeue = true
-		return result, err
-	}
-
-	deployment, err := createBootstrappedCluster(r, logger, cluster, bootstrap)
-	if err != nil {
-		return result, err
-	}
-
-	if deployment == nil {
-		result.Requeue = true
-		return result, err
-	}
-
-	pods, err := getPods(r, cluster)
-	if err != nil {
-		return result, err
-	}
-
-	names := getPodNames(pods)
-
-	if result, err = updateClusterNodeList(r, logger, cluster, names); err != nil {
+	if _, err = createBootstrappedCluster(r, logger, cluster, bootstrap); err != nil {
+		logger.Error(err, "Failed to create a deployment for the cluster.")
 		return result, err
 	}
 
@@ -196,69 +217,47 @@ func stageBootstrap(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1a
 func stageReady(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (reconcile.Result, error) {
 	var result reconcile.Result
 
-	bootstrap, err := createBootstrapNode(r, logger, cluster)
-	if err != nil {
-		return result, err
+	bootstrap, err := getBootstrapNode(r, cluster)
+	if bootstrap == nil || err != nil {
+		if errors.IsNotFound(err) {
+			cluster.Status.Stage = waveletv1alpha1.StageGenesis
+
+			if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
+				return result, err
+			}
+
+			return result, nil
+		}
+
+		return result, nil
 	}
 
-	if bootstrap == nil {
-		result.Requeue = true
-		return result, err
-	}
+	deployment, err := getBootstrappedCluster(r, cluster)
+	if deployment == nil || err != nil {
+		if errors.IsNotFound(err) {
+			cluster.Status.Stage = waveletv1alpha1.StageBootstrap
 
-	deployment, err := createBootstrappedCluster(r, logger, cluster, bootstrap)
-	if err != nil {
-		return result, err
-	}
+			if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
+				return result, err
+			}
 
-	if deployment == nil {
-		result.Requeue = true
-		return result, err
+			return result, nil
+		}
+
+		return result, nil
 	}
 
 	if err = listenForChanges(r, logger, cluster, bootstrap, deployment); err != nil {
 		return result, err
 	}
 
-	pods, err := getPods(r, cluster)
-	if err != nil {
-		return result, err
-	}
-
-	names := getPodNames(pods)
-
-	if result, err = updateClusterNodeList(r, logger, cluster, names); err != nil {
-		return result, err
-	}
-
 	return result, nil
 }
 
-func createBootstrapNode(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (*corev1.Pod, error) {
-	if cluster.Spec.Size == 0 {
-		return nil, nil
-	}
-
+func getBootstrapNode(r *ReconcileWavelet, cluster *waveletv1alpha1.Wavelet) (*corev1.Pod, error) {
 	bootstrap := new(corev1.Pod)
 
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, bootstrap); err != nil {
-		if errors.IsNotFound(err) { // Create a single bootstrap node.
-			logger.Info("Creating a single bootstrap node...")
-
-			bootstrap = getWaveletBootstrapPodSpec(cluster, "config/wallet.txt")
-
-			if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
-				return nil, err
-			}
-
-			if err := r.client.Create(context.TODO(), bootstrap); err != nil {
-				logger.Error(err, "Failed to create a bootstrap node.")
-				return nil, err
-			}
-
-			return nil, nil
-		}
-
 		return nil, err
 	}
 
@@ -269,27 +268,42 @@ func createBootstrapNode(r *ReconcileWavelet, logger logr.Logger, cluster *wavel
 	return bootstrap, nil
 }
 
-func createBootstrappedCluster(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet, bootstrap *corev1.Pod) (*appsv1.Deployment, error) {
+func getBootstrappedCluster(r *ReconcileWavelet, cluster *waveletv1alpha1.Wavelet) (*appsv1.Deployment, error) {
 	deployment := new(appsv1.Deployment)
 
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, deployment); err != nil {
-		if errors.IsNotFound(err) { // Create node deployment.
-			deployment = getWaveletDeploymentSpec(cluster, bootstrap.Status.PodIP+":3000")
+		return nil, err
+	}
 
-			if err := controllerutil.SetControllerReference(cluster, deployment, r.scheme); err != nil {
-				return nil, err
-			}
+	return deployment, nil
+}
 
-			if err := r.client.Create(context.TODO(), deployment); err != nil && !errors.IsAlreadyExists(err) {
-				logger.Error(err, "Failed to create a deployment for the cluster.")
-				return nil, err
-			}
+func createBootstrapNode(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (*corev1.Pod, error) {
+	logger.Info("Creating a single bootstrap node...")
 
-			logger.Info("Setting up and bootstrapping the rest of the cluster.", "num_nodes", cluster.Spec.Size)
+	bootstrap := getWaveletBootstrapPod(cluster, "config/wallet.txt")
 
-			return nil, nil
-		}
+	if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
+		return nil, err
+	}
 
+	if err := r.client.Create(context.TODO(), bootstrap); err != nil && !errors.IsAlreadyExists(err) {
+		return nil, err
+	}
+
+	return bootstrap, nil
+}
+
+func createBootstrappedCluster(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet, bootstrap *corev1.Pod) (*appsv1.Deployment, error) {
+	logger.Info("Setting up and bootstrapping the rest of the cluster.", "num_nodes", cluster.Spec.Size)
+
+	deployment := getWaveletDeployment(cluster, bootstrap.Status.PodIP+":3000")
+
+	if err := controllerutil.SetControllerReference(cluster, deployment, r.scheme); err != nil && !errors.IsAlreadyExists(err) {
+		return nil, err
+	}
+
+	if err := r.client.Create(context.TODO(), deployment); err != nil && !errors.IsAlreadyExists(err) {
 		return nil, err
 	}
 
@@ -297,26 +311,6 @@ func createBootstrappedCluster(r *ReconcileWavelet, logger logr.Logger, cluster 
 }
 
 func listenForChanges(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet, bootstrap *corev1.Pod, deployment *appsv1.Deployment) error {
-	if cluster.Spec.Size == 0 { // Handle the case where the cluster size is 0.
-		if err := r.client.Delete(context.TODO(), bootstrap); err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to delete the bootstrap node.")
-			return err
-		}
-
-		if err := r.client.Delete(context.TODO(), deployment); err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to delete the clusters deployment.")
-			return err
-		}
-
-		cluster.Status.Stage = waveletv1alpha1.StageGenesis
-
-		if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
 	if *deployment.Spec.Replicas != cluster.Spec.Size-1 { // Update the size of the cluster.
 		logger.Info("Updated the size of the cluster.", "old_size", *deployment.Spec.Replicas+1, "new_size", cluster.Spec.Size)
 
@@ -341,7 +335,7 @@ func updateClusterNodeList(r *ReconcileWavelet, logger logr.Logger, cluster *wav
 		cluster.Status.Nodes = names
 
 		if err := r.client.Status().Update(context.TODO(), cluster); err != nil {
-			logger.Error(err, "Failed to update the clusters node list.")
+			//logger.Error(err, "Failed to update the clusters node list.")
 			return result, nil
 		}
 
