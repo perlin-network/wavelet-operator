@@ -1,0 +1,6 @@
+apiVersion: wavelet.perlin.net/v1alpha1
+kind: Wavelet
+metadata:
+  name: benchmark-cluster
+spec:
+  size: 2
