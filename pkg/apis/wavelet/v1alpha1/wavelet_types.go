@@ -16,6 +16,7 @@ type WaveletDeploymentStage string
 const (
 	StageGenesis   WaveletDeploymentStage = "Genesis"
 	StageBootstrap WaveletDeploymentStage = "Bootstrap"
+	StageReady     WaveletDeploymentStage = "Ready"
 )
 
 // WaveletStatus defines the observed state of Wavelet
