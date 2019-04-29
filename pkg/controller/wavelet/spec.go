@@ -14,42 +14,14 @@ func labelsForWavelet(name string) labels.Set {
 	return labels.Set{"app": name}
 }
 
-func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, wallet string, bootstrapNodes ...string) *corev1.Pod {
+func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
 			Labels:    labelsForWavelet(cluster.Name),
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Image:   "localhost:5000/wavelet",
-					Name:    "wavelet",
-					Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000), "-wallet", wallet}, bootstrapNodes...),
-					Env: []corev1.EnvVar{
-						{
-							Name: "WAVELET_NODE_HOST",
-							ValueFrom: &corev1.EnvVarSource{
-								FieldRef: &corev1.ObjectFieldSelector{
-									FieldPath: "status.podIP",
-								},
-							},
-						},
-					},
-					Ports: []corev1.ContainerPort{
-						{
-							ContainerPort: 3000,
-							Name:          "node",
-						},
-						{
-							ContainerPort: 9000,
-							Name:          "http",
-						},
-					},
-				},
-			},
-		},
+		Spec: getWaveletPodSpec("config/wallet.txt"),
 	}
 }
 
@@ -79,33 +51,42 @@ func getWaveletDeployment(cluster *waveletv1alpha1.Wavelet, bootstrap ...string)
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: lbls,
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Image:   "localhost:5000/wavelet",
-							Name:    "wavelet",
-							Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000), "-wallet", "random"}, bootstrap...),
-							Env: []corev1.EnvVar{
-								{
-									Name: "WAVELET_NODE_HOST",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "status.podIP",
-										},
-									},
-								},
-							},
-							Ports: []corev1.ContainerPort{
-								{
-									ContainerPort: 3000,
-									Name:          "node",
-								},
-								{
-									ContainerPort: 9000,
-									Name:          "http",
-								},
+				Spec: getWaveletPodSpec("random", bootstrap...),
+			},
+		},
+	}
+}
+
+func getWaveletPodSpec(wallet string, bootstrap ...string) corev1.PodSpec {
+	return corev1.PodSpec{
+		Containers: []corev1.Container{
+			{
+				Stdin:   true,
+				Image:   "localhost:5000/wavelet",
+				Name:    "wavelet",
+				Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000), "-wallet", wallet}, bootstrap...),
+				Env: []corev1.EnvVar{
+					{
+						Name: "WAVELET_NODE_HOST",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "status.podIP",
 							},
 						},
+					},
+					{
+						Name:  "SNOWBALL_QUERY_K",
+						Value: "10",
+					},
+				},
+				Ports: []corev1.ContainerPort{
+					{
+						ContainerPort: 3000,
+						Name:          "node",
+					},
+					{
+						ContainerPort: 9000,
+						Name:          "http",
 					},
 				},
 			},

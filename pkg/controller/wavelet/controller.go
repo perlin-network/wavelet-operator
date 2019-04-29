@@ -281,7 +281,7 @@ func getBootstrappedCluster(r *ReconcileWavelet, cluster *waveletv1alpha1.Wavele
 func createBootstrapNode(r *ReconcileWavelet, logger logr.Logger, cluster *waveletv1alpha1.Wavelet) (*corev1.Pod, error) {
 	logger.Info("Creating a single bootstrap node...")
 
-	bootstrap := getWaveletBootstrapPod(cluster, "config/wallet.txt")
+	bootstrap := getWaveletBootstrapPod(cluster)
 
 	if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
 		return nil, err
