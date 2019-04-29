@@ -75,7 +75,7 @@ func getWaveletPodSpec(wallet string, bootstrap ...string) corev1.PodSpec {
 						},
 					},
 					{
-						Name:  "SNOWBALL_QUERY_K",
+						Name:  "WAVELET_SNOWBALL_K",
 						Value: "10",
 					},
 				},
