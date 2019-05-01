@@ -72,25 +72,35 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	pods := new(corev1.PodList)
+	list := new(corev1.PodList)
 
 	selector := labels.SelectorFromSet(labelsForWavelet(cluster.Name))
 	opts := &client.ListOptions{Namespace: cluster.Namespace, LabelSelector: selector}
 
-	if err := r.client.List(context.TODO(), opts, pods); err != nil {
+	if err := r.client.List(context.TODO(), opts, list); err != nil {
 		logger.Error(err, "Failed to list all pods created by the operator.")
 		return reconcile.Result{}, err
 	}
 
-	if cluster.Spec.Size <= 0 {
-		for _, pod := range pods.Items {
-			if err := r.client.Delete(context.TODO(), &pod, client.GracePeriodSeconds(0)); err != nil && !errors.IsNotFound(err) {
-				return reconcile.Result{}, err
-			}
+	var pods []corev1.Pod
+
+	for _, pod := range list.Items {
+		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
+			continue
 		}
 
-		if len(pods.Items) > 0 {
+		pods = append(pods, pod)
+	}
+
+	if cluster.Spec.Size <= 0 {
+		if len(pods) > 0 {
 			logger.Info("Deleting all pods in the cluster.")
+
+			for _, pod := range pods {
+				if err := r.client.Delete(context.TODO(), &pod, client.GracePeriodSeconds(0)); err != nil && !errors.IsNotFound(err) {
+					return reconcile.Result{}, err
+				}
+			}
 		}
 
 		return reconcile.Result{}, nil
@@ -132,23 +142,23 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	if len(pods.Items) == 1 {
+	if len(pods) == 1 {
 		logger.Info("Bootstrap pod is available.", "bootstrap_pod_name", bootstrap.Name, "bootstrap_pod_ip", bootstrap.Status.PodIP)
 	}
 
-	current := int32(len(pods.Items))
+	current := int32(len(pods))
 	expected := cluster.Spec.Size
 
 	if current > expected { // Scale down number of workers.
-		sort.Slice(pods.Items, func(i, j int) bool {
-			ii, _ := strconv.ParseInt(pods.Items[i].Name[len(cluster.Name):], 10, 32)
-			jj, _ := strconv.ParseInt(pods.Items[j].Name[len(cluster.Name):], 10, 32)
+		sort.Slice(pods, func(i, j int) bool {
+			ii, _ := strconv.ParseInt(pods[i].Name[len(cluster.Name):], 10, 32)
+			jj, _ := strconv.ParseInt(pods[j].Name[len(cluster.Name):], 10, 32)
 
 			return ii > jj
 		})
 
 		for i := current; i > expected; i-- {
-			target := pods.Items[i-1]
+			target := pods[i-1]
 
 			if err := r.client.Delete(context.TODO(), &target, client.GracePeriodSeconds(0)); err != nil {
 				logger.Error(err, "Failed to delete worker pod.", "pod_name", target.Name)

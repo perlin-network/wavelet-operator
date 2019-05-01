@@ -3,5 +3,5 @@ kind: Wavelet
 metadata:
   name: benchmark-cluster
 spec:
-  size: 4
+  size: 0
   num_rich_wallets: 3
