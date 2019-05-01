@@ -408,6 +408,19 @@
   version = "v1.2"
 
 [[projects]]
+  branch = "cleanup"
+  digest = "1:6c924f6f01399aec809e443ac119710fd096408f92ebb8f9e896e43251235657"
+  name = "github.com/perlin-network/noise"
+  packages = [
+    ".",
+    "edwards25519",
+    "skademlia",
+    "wire",
+  ]
+  pruneopts = "NT"
+  revision = "b29d30df73341544a73ef4e4fcf235c1cec9a822"
+
+[[projects]]
   branch = "master"
   digest = "1:bf2ac97824a7221eb16b096aecc1c390d4c8a4e49524386aaa2e2dd215cbfb31"
   name = "github.com/petar/GoLLRB"
@@ -422,6 +435,14 @@
   pruneopts = "NT"
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
   version = "v2.0.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:66a729007b3d140b10e26f0a0d3d73a6cd2c7b832f0be2992c0d36da69c5df9c"
+  name = "github.com/phf/go-queue"
+  packages = ["queue"]
+  pruneopts = "NT"
+  revision = "9abe38d0371deb4049011737cbd30e4ba80c673b"
 
 [[projects]]
   digest = "1:14715f705ff5dfe0ffd6571d7d201dd8e921030f8070321a79380d8ca4ec1a24"
@@ -503,6 +524,33 @@
   version = "v1.0.3"
 
 [[projects]]
+  digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
+  name = "github.com/valyala/bytebufferpool"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:eed2a011a981335cc6c63692d6db3249799f2b04090fcb21b563c08459bede18"
+  name = "github.com/valyala/fastjson"
+  packages = [
+    ".",
+    "fastfloat",
+  ]
+  pruneopts = "NT"
+  revision = "73ca3ce4bcd1cb08f60e48df25675b80c6a4e51e"
+  version = "v1.4.1"
+
+[[projects]]
+  digest = "1:055af3599226588634be0bbf308225608424e2acc05a808459365e7490478f81"
+  name = "github.com/valyala/fastrand"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "de27aeef8e28dd2bbf18ac43a0277f0f119ad14c"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:8bcb2616463bc981681c4b26f2aa817be8167682b76fb7884ec3fafdc9f82372"
   name = "go.opencensus.io"
   packages = [
@@ -564,7 +612,10 @@
   branch = "master"
   digest = "1:c2c9e2ffaa5eac239c12ce1440c635f80dd32f5184df1052cf207359b8e1ef0a"
   name = "golang.org/x/crypto"
-  packages = ["ssh/terminal"]
+  packages = [
+    "blake2b",
+    "ssh/terminal",
+  ]
   pruneopts = "NT"
   revision = "d864b10871cd4370fe574816b489c819c675ccc7"
 
@@ -612,6 +663,7 @@
   digest = "1:ccab3e89d17a59b4844a61b0aa926283243c68912473d1ee33b15084b1a79faf"
   name = "golang.org/x/sys"
   packages = [
+    "cpu",
     "unix",
     "windows",
   ]
@@ -1080,20 +1132,24 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/go-logr/logr",
     "github.com/go-openapi/spec",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/log/zap",
     "github.com/operator-framework/operator-sdk/pkg/metrics",
     "github.com/operator-framework/operator-sdk/version",
+    "github.com/perlin-network/noise/edwards25519",
+    "github.com/perlin-network/noise/skademlia",
     "github.com/spf13/pflag",
+    "github.com/valyala/fastjson",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
-    "k8s.io/apimachinery/pkg/types",
     "k8s.io/client-go/plugin/pkg/client/auth",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/conversion-gen",

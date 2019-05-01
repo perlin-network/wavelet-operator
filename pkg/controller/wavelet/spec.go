@@ -1,11 +1,12 @@
 package wavelet
 
 import (
+	"fmt"
 	waveletv1alpha1 "github.com/perlin-network/wavelet-operator/pkg/apis/wavelet/v1alpha1"
+	"io/ioutil"
 	"k8s.io/apimachinery/pkg/labels"
 	"strconv"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -14,57 +15,42 @@ func labelsForWavelet(name string) labels.Set {
 	return labels.Set{"app": name}
 }
 
-func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet) *corev1.Pod {
+func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, genesis string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
 			Labels:    labelsForWavelet(cluster.Name),
 		},
-		Spec: getWaveletPodSpec("config/wallet.txt"),
+		Spec: getWaveletPodSpec("config/wallet.txt", genesis),
 	}
 }
 
-func getWaveletDeployment(cluster *waveletv1alpha1.Wavelet, bootstrap ...string) *appsv1.Deployment {
-	lbls := labelsForWavelet(cluster.Name)
-	replicas := cluster.Spec.Size - 1
+func getWaveletPod(cluster *waveletv1alpha1.Wavelet, genesis string, idx uint, bootstrap ...string) *corev1.Pod {
+	privateKey, err := ioutil.ReadFile(fmt.Sprintf("config/wallet%d.txt", idx))
 
-	if replicas < 0 {
-		replicas = 0
+	if err != nil {
+		privateKey = []byte("random")
 	}
 
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
+	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name,
+			Name:      fmt.Sprintf("%s-%d", cluster.Name, idx),
 			Namespace: cluster.Namespace,
+			Labels:    labelsForWavelet(cluster.Name),
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: lbls,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: lbls,
-				},
-				Spec: getWaveletPodSpec("random", bootstrap...),
-			},
-		},
+		Spec: getWaveletPodSpec(string(privateKey), genesis, bootstrap...),
 	}
 }
 
-func getWaveletPodSpec(wallet string, bootstrap ...string) corev1.PodSpec {
+func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev1.PodSpec {
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Stdin:   true,
 				Image:   "localhost:5000/wavelet",
 				Name:    "wavelet",
-				Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000), "-wallet", wallet}, bootstrap...),
+				Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000)}, bootstrap...),
 				Env: []corev1.EnvVar{
 					{
 						Name: "WAVELET_NODE_HOST",
@@ -77,6 +63,14 @@ func getWaveletPodSpec(wallet string, bootstrap ...string) corev1.PodSpec {
 					{
 						Name:  "WAVELET_SNOWBALL_K",
 						Value: "10",
+					},
+					{
+						Name:  "WAVELET_GENESIS",
+						Value: genesis,
+					},
+					{
+						Name:  "WAVELET_WALLET",
+						Value: wallet,
 					},
 				},
 				Ports: []corev1.ContainerPort{

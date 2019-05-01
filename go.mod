@@ -45,6 +45,7 @@ require (
 	github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742
 	github.com/operator-framework/operator-sdk v0.0.0-20190423132450-ec538b5b4e4c
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
+	github.com/perlin-network/noise v0.0.0-20190430152526-b29d30df7334
 	github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c
 	github.com/peterbourgon/diskv v2.0.1+incompatible
 	github.com/pkg/errors v0.8.1
@@ -55,6 +56,7 @@ require (
 	github.com/rogpeppe/go-internal v1.3.0
 	github.com/spf13/afero v1.2.2
 	github.com/spf13/pflag v1.0.3
+	github.com/valyala/fastjson v1.4.1
 	go.opencensus.io v0.20.2
 	go.uber.org/atomic v1.3.2
 	go.uber.org/multierr v1.1.0

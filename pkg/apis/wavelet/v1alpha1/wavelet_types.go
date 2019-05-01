@@ -7,25 +7,13 @@ import (
 // WaveletSpec defines the desired state of Wavelet
 // +k8s:openapi-gen=true
 type WaveletSpec struct {
-	Size int32 `json:"size"`
+	Size           int32 `json:"size"`
+	NumRichWallets uint  `json:"num_rich_wallets"`
 }
-
-// WaveletDeploymentStage defines the current deployment stage of Wavelet
-type WaveletDeploymentStage string
-
-const (
-	StageGenesis   WaveletDeploymentStage = "Genesis"
-	StageBootstrap WaveletDeploymentStage = "Bootstrap"
-	StageReady     WaveletDeploymentStage = "Ready"
-)
 
 // WaveletStatus defines the observed state of Wavelet
 // +k8s:openapi-gen=true
-type WaveletStatus struct {
-	Stage WaveletDeploymentStage `json:"stage"`
-
-	Nodes []string `json:"nodes"`
-}
+type WaveletStatus struct{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

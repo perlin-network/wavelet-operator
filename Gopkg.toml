@@ -72,3 +72,11 @@ required = [
   [[prune.project]]
     name = "k8s.io/gengo"
     non-go = false
+
+[[constraint]]
+  branch = "cleanup"
+  name = "github.com/perlin-network/noise"
+
+[[constraint]]
+  name = "github.com/valyala/fastjson"
+  version = "1.4.1"
