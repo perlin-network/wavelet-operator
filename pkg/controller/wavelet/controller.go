@@ -6,6 +6,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"net"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sort"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -138,41 +140,44 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 	expected := cluster.Spec.Size
 
 	if current > expected { // Scale down number of workers.
-		target := pods.Items[0]
+		sort.Slice(pods.Items, func(i, j int) bool {
+			ii, _ := strconv.ParseInt(pods.Items[i].Name[len(cluster.Name):], 10, 32)
+			jj, _ := strconv.ParseInt(pods.Items[j].Name[len(cluster.Name):], 10, 32)
 
-		for i := 1; i < len(pods.Items); i++ {
-			if target.Name != bootstrap.Name {
-				break
+			return ii > jj
+		})
+
+		for i := current; i > expected; i-- {
+			target := pods.Items[i-1]
+
+			if err := r.client.Delete(context.TODO(), &target, client.GracePeriodSeconds(0)); err != nil {
+				logger.Error(err, "Failed to delete worker pod.", "pod_name", target.Name)
+				return reconcile.Result{}, err
 			}
 
-			target = pods.Items[1]
+			logger.Info("Deleted worker pod.", "pod_name", target.Name)
 		}
 
-		if err := r.client.Delete(context.TODO(), &target, client.GracePeriodSeconds(0)); err != nil {
-			logger.Error(err, "Failed to delete worker pod.", "pod_name", target.Name)
-			return reconcile.Result{}, err
-		}
-
-		logger.Info("Deleted worker pod.", "pod_name", target.Name)
-
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, nil
 	}
 
 	if current < expected { // Scale up number of workers.
-		pod := getWaveletPod(cluster, genesis, uint(current), net.JoinHostPort(bootstrap.Status.PodIP, "3000"))
+		for idx := current; idx < expected; idx++ {
+			pod := getWaveletPod(cluster, genesis, uint(idx), net.JoinHostPort(bootstrap.Status.PodIP, "3000"))
 
-		if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
-			return reconcile.Result{}, err
+			if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			if err := r.client.Create(context.TODO(), pod); err != nil && !errors.IsAlreadyExists(err) {
+				logger.Error(err, "Failed to create worker pod.", "idx", idx)
+				return reconcile.Result{}, err
+			}
+
+			logger.Info("Created worker pod.", "pod_name", pod.Name)
 		}
 
-		if err := r.client.Create(context.TODO(), pod); err != nil && !errors.IsAlreadyExists(err) {
-			logger.Error(err, "Failed to create worker pod.", "idx", current)
-			return reconcile.Result{}, err
-		}
-
-		logger.Info("Created worker pod.", "pod_name", pod.Name)
-
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, nil
 	}
 
 	return reconcile.Result{}, nil
