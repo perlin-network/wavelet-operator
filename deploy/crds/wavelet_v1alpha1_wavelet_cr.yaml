@@ -5,3 +5,4 @@ metadata:
 spec:
   size: 0
   num_rich_wallets: 3
+  num_benchmark_nodes: 0

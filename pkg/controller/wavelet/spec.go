@@ -5,6 +5,7 @@ import (
 	waveletv1alpha1 "github.com/perlin-network/wavelet-operator/pkg/apis/wavelet/v1alpha1"
 	"io/ioutil"
 	"k8s.io/apimachinery/pkg/labels"
+	"net"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -13,6 +14,22 @@ import (
 
 func labelsForWavelet(name string) labels.Set {
 	return labels.Set{"app": name}
+}
+
+func getWaveletBenchmarkPod(cluster *waveletv1alpha1.Wavelet, pod *corev1.Pod) *corev1.Pod {
+	idx, _ := strconv.ParseInt(pod.Name[len(cluster.Name):], 10, 32)
+
+	host := net.JoinHostPort(pod.Status.PodIP, "9000")
+	privateKey := pod.Spec.Containers[0].Env[3].Value
+
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-benchmark-%d", cluster.Name, idx),
+			Namespace: cluster.Namespace,
+			Labels:    labelsForWavelet(cluster.Name),
+		},
+		Spec: getWaveletBenchmarkPodSpec(host, privateKey),
+	}
 }
 
 func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, genesis string) *corev1.Pod {
@@ -40,6 +57,18 @@ func getWaveletPod(cluster *waveletv1alpha1.Wavelet, genesis string, idx uint, b
 			Labels:    labelsForWavelet(cluster.Name),
 		},
 		Spec: getWaveletPodSpec(string(privateKey), genesis, bootstrap...),
+	}
+}
+
+func getWaveletBenchmarkPodSpec(host, privateKey string) corev1.PodSpec {
+	return corev1.PodSpec{
+		Containers: []corev1.Container{
+			{
+				Image:   "localhost:5000/wavelet",
+				Name:    "benchmark",
+				Command: []string{"./benchmark", "-host", host, "-sk", privateKey},
+			},
+		},
 	}
 }
 

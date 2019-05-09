@@ -7,8 +7,9 @@ import (
 // WaveletSpec defines the desired state of Wavelet
 // +k8s:openapi-gen=true
 type WaveletSpec struct {
-	Size           int32 `json:"size"`
-	NumRichWallets uint  `json:"num_rich_wallets"`
+	Size              int32 `json:"size"`
+	NumRichWallets    uint  `json:"num_rich_wallets"`
+	NumBenchmarkNodes uint  `json:"num_benchmark_nodes"`
 }
 
 // WaveletStatus defines the observed state of Wavelet
