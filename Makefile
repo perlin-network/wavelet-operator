@@ -7,11 +7,14 @@ docker_aws:
 	sed -i 's|REPLACE_IMAGE|010313437810.dkr.ecr.us-east-2.amazonaws.com/perlin/wavelet-operator|g' deploy/operator.yaml
 
 docker_hub:
-	operator-sdk build perlin/wavelet:operator
-	docker push perlin/wavelet:operator
+	operator-sdk build repo.treescale.com/perlin/wavelet-operator
+	docker push repo.treescale.com/perlin/wavelet-operator
 	sed -i 's|REPLACE_IMAGE|perlin/wavelet:operator|g' deploy/operator.yaml
 
 setup:
+	kubectl create secret generic regcred \
+   		--from-file=.dockerconfigjson=$(HOME)/.docker/config.json \
+    	--type=kubernetes.io/dockerconfigjson
 	kubectl apply -f deploy/service_account.yaml
 	kubectl apply -f deploy/role.yaml
 	kubectl apply -f deploy/role_binding.yaml
@@ -26,6 +29,7 @@ delete:
 	kubectl delete -f deploy/role_binding.yaml
 	kubectl delete -f deploy/service_account.yaml
 	kubectl delete -f deploy/crds/wavelet_v1alpha1_wavelet_crd.yaml
+	kubectl delete secret regcred
 
 update:
 	kubectl apply -f deploy/crds/wavelet_v1alpha1_wavelet_cr.yaml

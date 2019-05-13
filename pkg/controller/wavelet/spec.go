@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const ImageWavelet = "perlin/wavelet:node"
+const ImageWavelet = "repo.treescale.com/perlin/wavelet"
 
 func labelsForWavelet(name string, role string) labels.Set {
 	return labels.Set{"app": name, "role": role}
@@ -99,7 +99,11 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 					},
 					{
 						Name:  "WAVELET_SNOWBALL_K",
-						Value: "3",
+						Value: "10",
+					},
+					{
+						Name:  "WAVELET_SNOWBALL_BETA",
+						Value: "150",
 					},
 					{
 						Name:  "WAVELET_GENESIS",

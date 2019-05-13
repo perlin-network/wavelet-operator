@@ -16,7 +16,7 @@ spec:
       containers:
         - name: wavelet-operator
           # Replace this with the built image name
-          image: perlin/wavelet:operator
+          image: repo.treescale.com/perlin/wavelet-operator
           command:
             - wavelet-operator
           imagePullPolicy: Always
