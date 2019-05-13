@@ -12,23 +12,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func labelsForWavelet(name string) labels.Set {
-	return labels.Set{"app": name}
+const ImageWavelet = "perlin/wavelet:node"
+
+func labelsForWavelet(name string, role string) labels.Set {
+	return labels.Set{"app": name, "role": role}
 }
 
-func getWaveletBenchmarkPod(cluster *waveletv1alpha1.Wavelet, pod *corev1.Pod) *corev1.Pod {
+func getWaveletBenchmarkPod(cluster *waveletv1alpha1.Wavelet, pod corev1.Pod) *corev1.Pod {
 	idx, _ := strconv.ParseInt(pod.Name[len(cluster.Name):], 10, 32)
 
 	host := net.JoinHostPort(pod.Status.PodIP, "9000")
-	privateKey := pod.Spec.Containers[0].Env[3].Value
+	wallet := pod.Spec.Containers[0].Env[3].Value
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-benchmark-%d", cluster.Name, idx),
 			Namespace: cluster.Namespace,
-			Labels:    labelsForWavelet(cluster.Name),
+			Labels:    labelsForWavelet(cluster.Name, "benchmark"),
 		},
-		Spec: getWaveletBenchmarkPodSpec(host, privateKey),
+		Spec: getWaveletBenchmarkPodSpec(host, wallet),
 	}
 }
 
@@ -37,13 +39,13 @@ func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, genesis string) *c
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
-			Labels:    labelsForWavelet(cluster.Name),
+			Labels:    labelsForWavelet(cluster.Name, "node"),
 		},
 		Spec: getWaveletPodSpec("config/wallet.txt", genesis),
 	}
 }
 
-func getWaveletPod(cluster *waveletv1alpha1.Wavelet, genesis string, idx uint, bootstrap ...string) *corev1.Pod {
+func getWaveletNodePod(cluster *waveletv1alpha1.Wavelet, genesis string, idx uint, bootstrap ...string) *corev1.Pod {
 	privateKey, err := ioutil.ReadFile(fmt.Sprintf("config/wallet%d.txt", idx))
 
 	if err != nil {
@@ -54,19 +56,25 @@ func getWaveletPod(cluster *waveletv1alpha1.Wavelet, genesis string, idx uint, b
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%d", cluster.Name, idx),
 			Namespace: cluster.Namespace,
-			Labels:    labelsForWavelet(cluster.Name),
+			Labels:    labelsForWavelet(cluster.Name, "node"),
 		},
 		Spec: getWaveletPodSpec(string(privateKey), genesis, bootstrap...),
 	}
 }
 
-func getWaveletBenchmarkPodSpec(host, privateKey string) corev1.PodSpec {
+func getWaveletBenchmarkPodSpec(host, wallet string) corev1.PodSpec {
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
-				Image:   "localhost:5000/wavelet",
-				Name:    "benchmark",
-				Command: []string{"./benchmark", "-host", host, "-sk", privateKey},
+				Stdin:   true,
+				Image:   ImageWavelet,
+				Name:    "wavelet",
+				Command: []string{"./benchmark", "remote", "-host", host, "-wallet", wallet},
+			},
+		},
+		ImagePullSecrets: []corev1.LocalObjectReference{
+			{
+				Name: "regcred",
 			},
 		},
 	}
@@ -77,7 +85,7 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 		Containers: []corev1.Container{
 			{
 				Stdin:   true,
-				Image:   "localhost:5000/wavelet",
+				Image:   ImageWavelet,
 				Name:    "wavelet",
 				Command: append([]string{"./wavelet", "-api.port", strconv.Itoa(9000)}, bootstrap...),
 				Env: []corev1.EnvVar{
@@ -91,7 +99,7 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 					},
 					{
 						Name:  "WAVELET_SNOWBALL_K",
-						Value: "10",
+						Value: "3",
 					},
 					{
 						Name:  "WAVELET_GENESIS",
@@ -112,6 +120,11 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 						Name:          "http",
 					},
 				},
+			},
+		},
+		ImagePullSecrets: []corev1.LocalObjectReference{
+			{
+				Name: "regcred",
 			},
 		},
 	}

@@ -3,6 +3,6 @@ kind: Wavelet
 metadata:
   name: benchmark-cluster
 spec:
-  size: 0
-  num_rich_wallets: 3
-  num_benchmark_nodes: 0
+  size: 15
+  num_rich_wallets: 30
+  num_benchmark_pods: 1

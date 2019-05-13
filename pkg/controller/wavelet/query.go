@@ -9,10 +9,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func getPods(r *ReconcileWavelet, cluster *waveletv1alpha1.Wavelet) ([]corev1.Pod, error) {
+func getPods(r *ReconcileWavelet, cluster *waveletv1alpha1.Wavelet, role string) ([]corev1.Pod, error) {
 	pods := new(corev1.PodList)
 
-	selector := labels.SelectorFromSet(labelsForWavelet(cluster.Name))
+	selector := labels.SelectorFromSet(labelsForWavelet(cluster.Name, role))
 	opts := &client.ListOptions{Namespace: cluster.Namespace, LabelSelector: selector}
 
 	if err := r.client.List(context.TODO(), opts, pods); err != nil {

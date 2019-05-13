@@ -72,32 +72,60 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	list := new(corev1.PodList)
+	nodeList := new(corev1.PodList)
 
-	selector := labels.SelectorFromSet(labelsForWavelet(cluster.Name))
-	opts := &client.ListOptions{Namespace: cluster.Namespace, LabelSelector: selector}
+	opts := &client.ListOptions{Namespace: cluster.Namespace, LabelSelector: labels.SelectorFromSet(labelsForWavelet(cluster.Name, "node"))}
 
-	if err := r.client.List(context.TODO(), opts, list); err != nil {
-		logger.Error(err, "Failed to list all pods created by the operator.")
+	if err := r.client.List(context.TODO(), opts, nodeList); err != nil {
+		logger.Error(err, "Failed to list all node pods created by the operator.")
 		return reconcile.Result{}, err
 	}
 
-	var pods []corev1.Pod
+	var nodePods []corev1.Pod
 
-	for _, pod := range list.Items {
+	for _, pod := range nodeList.Items {
 		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
 			continue
 		}
 
-		pods = append(pods, pod)
+		nodePods = append(nodePods, pod)
+	}
+
+	benchmarkList := new(corev1.PodList)
+
+	opts = &client.ListOptions{Namespace: cluster.Namespace, LabelSelector: labels.SelectorFromSet(labelsForWavelet(cluster.Name, "benchmark"))}
+
+	if err := r.client.List(context.TODO(), opts, benchmarkList); err != nil {
+		logger.Error(err, "Failed to list all benchmark pods created by the operator.")
+		return reconcile.Result{}, err
+	}
+
+	var benchmarkPods []corev1.Pod
+
+	for _, benchmarkPod := range benchmarkList.Items {
+		if benchmarkPod.GetObjectMeta().GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		benchmarkPods = append(benchmarkPods, benchmarkPod)
 	}
 
 	if cluster.Spec.Size <= 0 {
-		if len(pods) > 0 {
-			logger.Info("Deleting all pods in the cluster.")
+		if len(nodePods) > 0 {
+			logger.Info("Deleting all node pods in the cluster.")
 
-			for _, pod := range pods {
+			for _, pod := range nodePods {
 				if err := r.client.Delete(context.TODO(), &pod, client.GracePeriodSeconds(0)); err != nil && !errors.IsNotFound(err) {
+					return reconcile.Result{}, err
+				}
+			}
+		}
+
+		if len(benchmarkPods) > 0 {
+			logger.Info("Deleting all benchmark pods in the cluster.")
+
+			for _, benchmarkPod := range benchmarkPods {
+				if err := r.client.Delete(context.TODO(), &benchmarkPod, client.GracePeriodSeconds(0)); err != nil && !errors.IsNotFound(err) {
 					return reconcile.Result{}, err
 				}
 			}
@@ -142,23 +170,23 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	if len(pods) == 1 {
+	if len(nodePods) == 1 {
 		logger.Info("Bootstrap pod is available.", "bootstrap_pod_name", bootstrap.Name, "bootstrap_pod_ip", bootstrap.Status.PodIP)
 	}
 
-	current := int32(len(pods))
-	expected := cluster.Spec.Size
+	currentNumNode := int32(len(nodePods))
+	expectedNumNodes := cluster.Spec.Size
 
-	if current > expected { // Scale down number of workers.
-		sort.Slice(pods, func(i, j int) bool {
-			ii, _ := strconv.ParseInt(pods[i].Name[len(cluster.Name):], 10, 32)
-			jj, _ := strconv.ParseInt(pods[j].Name[len(cluster.Name):], 10, 32)
+	if currentNumNode > expectedNumNodes { // Scale down number of workers.
+		sort.Slice(nodePods, func(i, j int) bool {
+			ii, _ := strconv.ParseInt(nodePods[i].Name[len(cluster.Name):], 10, 32)
+			jj, _ := strconv.ParseInt(nodePods[j].Name[len(cluster.Name):], 10, 32)
 
 			return ii > jj
 		})
 
-		for i := current; i > expected; i-- {
-			target := pods[i-1]
+		for i := currentNumNode; i > expectedNumNodes; i-- {
+			target := nodePods[i-1]
 
 			if err := r.client.Delete(context.TODO(), &target, client.GracePeriodSeconds(0)); err != nil {
 				logger.Error(err, "Failed to delete worker pod.", "pod_name", target.Name)
@@ -168,26 +196,89 @@ func (r *ReconcileWavelet) Reconcile(request reconcile.Request) (reconcile.Resul
 			logger.Info("Deleted worker pod.", "pod_name", target.Name)
 		}
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{Requeue: true}, nil
 	}
 
-	if current < expected { // Scale up number of workers.
-		for idx := current; idx < expected; idx++ {
-			pod := getWaveletPod(cluster, genesis, uint(idx), net.JoinHostPort(bootstrap.Status.PodIP, "3000"))
+	if currentNumNode < expectedNumNodes { // Scale up number of workers.
+		for idx := currentNumNode; idx < expectedNumNodes; idx++ {
+			nodePod := getWaveletNodePod(cluster, genesis, uint(idx), net.JoinHostPort(bootstrap.Status.PodIP, "3000"))
 
-			if err := controllerutil.SetControllerReference(cluster, bootstrap, r.scheme); err != nil {
+			if err := controllerutil.SetControllerReference(cluster, nodePod, r.scheme); err != nil {
 				return reconcile.Result{}, err
 			}
 
-			if err := r.client.Create(context.TODO(), pod); err != nil && !errors.IsAlreadyExists(err) {
+			if err := r.client.Create(context.TODO(), nodePod); err != nil && !errors.IsAlreadyExists(err) {
 				logger.Error(err, "Failed to create worker pod.", "idx", idx)
 				return reconcile.Result{}, err
 			}
 
-			logger.Info("Created worker pod.", "pod_name", pod.Name)
+			logger.Info("Created worker pod.", "pod_name", nodePod.Name)
 		}
 
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	sort.Slice(nodePods, func(i, j int) bool {
+		ii, _ := strconv.ParseInt(nodePods[i].Name[len(cluster.Name):], 10, 32)
+		jj, _ := strconv.ParseInt(nodePods[j].Name[len(cluster.Name):], 10, 32)
+
+		return ii > jj
+	})
+
+	for i, nodePod := range nodePods {
+		if len(nodePod.Status.PodIP) == 0 {
+			logger.Info("Waiting for pod to be ready before initializing benchmark nodes...", "pod_name", nodePod.Name, "pod_idx", i, "pod_status", nodePod.Status.Phase)
+			return reconcile.Result{RequeueAfter: 1 * time.Second}, nil
+		}
+	}
+
+	currentNumBenchmarkPods := uint(len(benchmarkPods))
+	expectedNumBenchmarkPods := cluster.Spec.NumBenchmarkPods
+
+	if expectedNumBenchmarkPods > uint(len(nodePods)) {
+		logger.Info("There must always be equal to or less benchmark pods than node pods in the cluster. Please reconfigure your cluster.", "expected_num_benchmark_pods", expectedNumBenchmarkPods, "cluster_size", len(nodePods))
 		return reconcile.Result{}, nil
+	}
+
+	if currentNumBenchmarkPods > expectedNumBenchmarkPods {
+		sort.Slice(benchmarkPods, func(i, j int) bool {
+			ii, _ := strconv.ParseInt(benchmarkPods[i].Name[len(cluster.Name)+len("-benchmark"):], 10, 32)
+			jj, _ := strconv.ParseInt(benchmarkPods[j].Name[len(cluster.Name)+len("-benchmark"):], 10, 32)
+
+			return ii > jj
+		})
+
+		for i := currentNumBenchmarkPods; i > expectedNumBenchmarkPods; i-- {
+			target := benchmarkPods[i-1]
+
+			if err := r.client.Delete(context.TODO(), &target, client.GracePeriodSeconds(0)); err != nil {
+				logger.Error(err, "Failed to delete benchmark pod.", "pod_name", target.Name)
+				return reconcile.Result{}, err
+			}
+
+			logger.Info("Deleted benchmark pod.", "pod_name", target.Name)
+		}
+
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	if currentNumBenchmarkPods < expectedNumBenchmarkPods {
+		for idx := currentNumBenchmarkPods; idx < expectedNumBenchmarkPods; idx++ {
+			benchmarkPod := getWaveletBenchmarkPod(cluster, nodePods[idx])
+
+			if err := controllerutil.SetControllerReference(cluster, benchmarkPod, r.scheme); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			if err := r.client.Create(context.TODO(), benchmarkPod); err != nil && !errors.IsAlreadyExists(err) {
+				logger.Error(err, "Failed to create benchmark pod.", "idx", idx)
+				return reconcile.Result{}, err
+			}
+
+			logger.Info("Created benchmark pod.", "pod_name", benchmarkPod.Name)
+		}
+
+		return reconcile.Result{Requeue: true}, nil
 	}
 
 	return reconcile.Result{}, nil
