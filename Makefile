@@ -33,3 +33,6 @@ delete:
 
 update:
 	kubectl apply -f deploy/crds/wavelet_v1alpha1_wavelet_cr.yaml
+
+license:
+	addlicense -l mit -c Perlin $(PWD)
