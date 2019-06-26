@@ -47,7 +47,7 @@ func createGenesis(logger logr.Logger, n uint) (string, error) {
 		return "", fmt.Errorf("an unknown error occured creating directory %q", GenPath)
 	}
 
-	genesis := fastjson.MustParse(`{"400056ee68a7cc2695222df05ea76875bc27ec6e61e8e62317c336157019c405": {"balance": 10000000000000000000}}`)
+	genesis := fastjson.MustParse(`{}`)
 	balance := fastjson.MustParse(`{"balance": 10000000000000000000}`)
 
 	for i := uint(1); i < n; i++ { // Exclude 1 wallet because we already include 1 additional wallet by default.

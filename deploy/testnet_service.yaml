@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: testnet
+spec:
+  type: LoadBalancer
+  selector:
+    class: bootstrap
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9000

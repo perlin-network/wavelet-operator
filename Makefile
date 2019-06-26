@@ -31,6 +31,12 @@ delete:
 	kubectl delete -f deploy/crds/wavelet_v1alpha1_wavelet_crd.yaml
 	kubectl delete secret regcred
 
+testnet_create:
+	kubectl apply -f deploy/testnet_service.yaml
+
+testnet_delete:
+	kubectl delete -f deploy/testnet_service.yaml
+
 update:
 	kubectl apply -f deploy/crds/wavelet_v1alpha1_wavelet_cr.yaml
 

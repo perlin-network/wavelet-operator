@@ -33,8 +33,14 @@ import (
 
 const ImageWavelet = "repo.treescale.com/perlin/wavelet"
 
-func labelsForWavelet(name string, role string) labels.Set {
-	return labels.Set{"app": name, "role": role}
+func labelsForWavelet(l ...string) labels.Set {
+	set := labels.Set{"app": l[0], "role": l[1]}
+
+	if len(l) == 3 {
+		set["class"] = l[2]
+	}
+
+	return set
 }
 
 func getWaveletNodeWallet(pod corev1.Pod) string {
@@ -68,7 +74,7 @@ func getWaveletBootstrapPod(cluster *waveletv1alpha1.Wavelet, genesis string) *c
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
-			Labels:    labelsForWavelet(cluster.Name, "node"),
+			Labels:    labelsForWavelet(cluster.Name, "node", "bootstrap"),
 		},
 		Spec: getWaveletPodSpec("config/wallet.txt", genesis),
 	}
@@ -132,7 +138,7 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 					},
 					{
 						Name:  "WAVELET_SNOWBALL_BETA",
-						Value: "150",
+						Value: "20",
 					},
 					{
 						Name:  "WAVELET_GENESIS",
@@ -141,6 +147,10 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 					{
 						Name:  "WAVELET_WALLET",
 						Value: wallet,
+					},
+					{
+						Name:  "WAVELET_DB_PATH",
+						Value: "db",
 					},
 				},
 				Ports: []corev1.ContainerPort{
