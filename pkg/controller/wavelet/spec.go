@@ -152,6 +152,10 @@ func getWaveletPodSpec(wallet string, genesis string, bootstrap ...string) corev
 						Name:  "WAVELET_DB_PATH",
 						Value: "db",
 					},
+					{
+						Name: "WAVELET_MEMORY_MAX",
+						Value: "8192",
+					},
 				},
 				Ports: []corev1.ContainerPort{
 					{
